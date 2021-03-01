@@ -18,7 +18,7 @@ def sigmoid(x):
     """
 
     ### YOUR CODE HERE (~1 Line)
-
+    s=1/(1+np.exp(-x))
     ### END YOUR CODE
 
     return s
@@ -64,7 +64,12 @@ def naiveSoftmaxLossAndGradient(
     ### Please use the provided softmax function (imported earlier in this file)
     ### This numerically stable implementation helps you avoid issues pertaining
     ### to integer overflow. 
-
+    y_hat=softmax(np.dot(centerWordVec,outsideVectors.T))
+    delta=y_hat.copy()
+    delta[outsideWordIdx]-=1
+    loss=-np.log(y_hat[outsideWordIdx])
+    gradCenterVec=np.dot(delta,outsideVectors)
+    gradOutsideVecs=np.dot(delta[:,np.newaxis],centerWordVec[np.newaxis,:])
     ### END YOUR CODE
 
     return loss, gradCenterVec, gradOutsideVecs
@@ -108,12 +113,29 @@ def negSamplingLossAndGradient(
     negSampleWordIndices = getNegativeSamples(outsideWordIdx, dataset, K)
     indices = [outsideWordIdx] + negSampleWordIndices
 
-    ### YOUR CODE HERE (~10 Lines)
+    scores = (outsideVectors[indices] @ centerWordVec)[:, np.newaxis]
+    trueOutsideWordScore = scores[0]
+    probFromCorpus = sigmoid(trueOutsideWordScore)
+    negSampleScores = -scores[1:]
+    probNotFromCorpus = sigmoid(negSampleScores)
 
-    ### Please use your implementation of sigmoid in here.
+    loss = float(-np.log(probFromCorpus) -
+                 np.sum(np.log(probNotFromCorpus), axis=0))
 
-    ### END YOUR CODE
+    gradFromCorpus = -outsideVectors[outsideWordIdx] * (1 - probFromCorpus)
+    gradNotFromCorpus = np.sum(
+        outsideVectors[negSampleWordIndices] * (1 - probNotFromCorpus), axis=0)
+    gradCenterVec = gradFromCorpus + gradNotFromCorpus
 
+    gradOutsideVecs = np.zeros(outsideVectors.shape)
+    gradOutsideVecs[outsideWordIdx] = -centerWordVec * (1 - probFromCorpus)
+    gradOutsideVecs[negSampleWordIndices] += centerWordVec * \
+        (1 - probNotFromCorpus)
+    # Factor in repeatedly drawn negative samples.
+    indexCount = np.bincount(indices)[:, np.newaxis]
+    # for i in np.unique(indices):
+    #     gradOutsideVecs[i] *= indexCount[i]
+    gradOutsideVecs[np.unique(indices)] *= indexCount[np.unique(indices)]
     return loss, gradCenterVec, gradOutsideVecs
 
 
@@ -157,7 +179,15 @@ def skipgram(currentCenterWord, windowSize, outsideWords, word2Ind,
     gradOutsideVectors = np.zeros(outsideVectors.shape)
 
     ### YOUR CODE HERE (~8 Lines)
+    currentCenterWordldx=word2Ind[currentCenterWord]
+    centerWordVector=centerWordVectors[currentCenterWordldx]
 
+    for outsideWord in outsideWords:
+        outsideWordldx=word2Ind[outsideWord]
+        (l,gradCenter,gradOutside)=word2vecLossAndGradient(centerWordVector,outsideWordldx,outsideVectors,dataset)
+        loss+=l
+        gradCenterVecs[currentCenterWordldx]+=gradCenter
+        gradOutsideVectors+=gradOutside
     ### END YOUR CODE
     
     return loss, gradCenterVecs, gradOutsideVectors
